@@ -1,4 +1,19 @@
-# Getting Started with Create React App
+# Geospatial File Decision Tool
+
+A React SPA that helps users determine the best VEDA visualization service for their geospatial files. Upload a file or provide an S3/HTTPS link to get recommendations for services like titiler-pgstac, titiler-multidim, titiler-cmr, or tipg.
+
+## Features
+
+- **Step 1: File Input** - Upload files or provide S3/HTTPS URLs
+- **Step 2: Validation** - Real COG validation using OpenVEDA API, format detection
+- **Step 3: Visualization Options** - Smart recommendations based on file characteristics
+
+### Supported Formats
+- COG (Cloud Optimized GeoTIFF) - with real-time validation
+- NetCDF (Network Common Data Form)
+- GeoParquet (Columnar geospatial format)
+- GRIB (Gridded Binary)
+- HDF5 (Hierarchical Data Format)
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
@@ -61,9 +76,32 @@ This section has moved here: [https://facebook.github.io/create-react-app/docs/m
 
 This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
 
-### Deployment
+### Deployment to GitHub Pages
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+This project is configured to automatically deploy to GitHub Pages when you push to the `main` branch.
+
+#### Setup Instructions
+
+1. **Enable GitHub Pages in your repository:**
+   - Go to your repository on GitHub
+   - Navigate to Settings → Pages
+   - Under "Source", select "GitHub Actions"
+
+2. **Push your code to GitHub:**
+   ```bash
+   git add .
+   git commit -m "Add GitHub Pages deployment"
+   git push origin main
+   ```
+
+3. **Wait for the deployment:**
+   - The GitHub Action will automatically run
+   - Check the "Actions" tab to see the deployment progress
+   - Once complete, your app will be available at the GitHub Pages URL
+
+The deployment workflow (`.github/workflows/deploy.yml`) is based on the [spatial-access-measures deployment workflow](https://github.com/developmentseed/spatial-access-measures/blob/main/.github/workflows/deploy.yml).
+
+For more deployment options, see: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
 
 ### `npm run build` fails to minify
 

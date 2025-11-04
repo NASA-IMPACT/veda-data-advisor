@@ -96,8 +96,44 @@ npm test        # Run tests
 npm run build   # Production build
 ```
 
+## Deployment to GitHub Pages
+
+This project is configured to automatically deploy to GitHub Pages when you push to the `main` branch.
+
+### Setup Instructions
+
+1. **Enable GitHub Pages in your repository:**
+   - Go to your repository on GitHub
+   - Navigate to Settings → Pages
+   - Under "Source", select "GitHub Actions"
+
+2. **Push your code to GitHub:**
+   ```bash
+   git add .
+   git commit -m "Add GitHub Pages deployment"
+   git push origin main
+   ```
+
+3. **Wait for the deployment:**
+   - The GitHub Action will automatically run
+   - Check the "Actions" tab to see the deployment progress
+   - Once complete, your app will be available at the GitHub Pages URL
+
+### How it Works
+
+The deployment workflow (`.github/workflows/deploy.yml`) is based on the [spatial-access-measures deployment workflow](https://github.com/developmentseed/spatial-access-measures/blob/main/.github/workflows/deploy.yml) and:
+
+- Triggers on push to the `main` branch
+- Installs dependencies with `npm ci`
+- Builds the React app with `npm run build`
+- Uploads the `build` folder as a GitHub Pages artifact
+- Deploys to GitHub Pages
+
+The `homepage` field in `package.json` is set to `"."` for relative path support, making it work both locally and on GitHub Pages.
+
 ## Technologies
 - React 18
 - Create React App
 - CSS3 (no external UI library for now)
+- GitHub Actions for CI/CD
 
