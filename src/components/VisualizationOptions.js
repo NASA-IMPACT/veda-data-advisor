@@ -6,16 +6,6 @@ function ServiceCard({ service }) {
     <div className="service-card">
       <div className="service-header">
         <h4 className="service-title">{service.title}</h4>
-        {service.docsUrl && (
-          <a 
-            href={service.docsUrl}
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="api-docs-link"
-          >
-            📖 View API Docs
-          </a>
-        )}
       </div>
       <p className="service-description">{service.description}</p>
       
@@ -29,7 +19,19 @@ function ServiceCard({ service }) {
         <div className="endpoints-section">
           {service.endpoints.map((endpoint, index) => (
             <div key={index} className="endpoint-item">
-              <h5 className="endpoint-title">{endpoint.title}</h5>
+              <div className="endpoint-header">
+                <h5 className="endpoint-title">{endpoint.title}</h5>
+                {service.docsUrl && (
+                  <a 
+                    href={service.docsUrl}
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="api-docs-link-small"
+                  >
+                    📖 API Docs
+                  </a>
+                )}
+              </div>
               <p className="endpoint-description">{endpoint.description}</p>
               
               <div className="api-url-box">
@@ -187,7 +189,7 @@ function VisualizationOptions({ fileData, validationResult, onReset }) {
     <div className="visualization-container">
       <h2>Step 3: Recommended Visualization Services</h2>
       <p className="step-description">
-        Based on your file <strong>{fileData.fileName}</strong> ({validationResult.format})
+        Based on your file <strong>{fileData.s3Url}</strong> ({validationResult.format})
       </p>
 
       <div className="file-info-card">
@@ -248,15 +250,6 @@ function VisualizationOptions({ fileData, validationResult, onReset }) {
           )}
         </div>
       )}
-
-      <div className="decision-tree-info">
-        <h4>Decision Logic</h4>
-        <p>
-          These recommendations are based on the VEDA dataset service decision tree. 
-          The tool analyzed your file's format, spatial type, cloud optimization status, 
-          and temporal characteristics to suggest the most appropriate visualization service.
-        </p>
-      </div>
 
       <div className="button-group">
         <button onClick={onReset} className="reset-button">
