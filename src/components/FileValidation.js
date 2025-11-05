@@ -46,6 +46,7 @@ function FileValidation({ fileData, onValidationComplete, onBack }) {
           isValid = compatibilityResult.isValid;
           validationDetails = compatibilityResult.details;
           const detectedFormat = compatibilityResult.format;
+          const hasTimeDimension = compatibilityResult.hasTimeDimension;
           
           steps[steps.length - 1].status = 'completed';
           steps[steps.length - 1].message = compatibilityResult.message;
@@ -62,7 +63,7 @@ function FileValidation({ fileData, onValidationComplete, onBack }) {
               conceptId: conceptId,
               metadata: {
                 format: detectedFormat,
-                hasTimeDimension: detectedFormat === 'NetCDF',
+                hasTimeDimension: hasTimeDimension,
                 spatialType: 'raster',
                 hasMultipleBands: true,
                 source: 'Earthdata Cloud'
@@ -176,10 +177,16 @@ function FileValidation({ fileData, onValidationComplete, onBack }) {
     }
   };
 
-  const parseCMRConceptId = (url) => {
-    // Extract concept ID from CMR URL
+  const parseCMRConceptId = (input) => {
+    // Check if input is already a concept ID (e.g., C2036881735-POCLOUD)
+    const conceptIdPattern = /^C\d+-[A-Z_]+$/;
+    if (conceptIdPattern.test(input.trim())) {
+      return input.trim();
+    }
+    
+    // Otherwise, extract concept ID from CMR URL
     // Example: https://cmr.earthdata.nasa.gov/search/concepts/C1996881146-POCLOUD.html
-    const match = url.match(/concepts\/([^/.]+)/);
+    const match = input.match(/concepts\/([^/.]+)/);
     return match ? match[1] : null;
   };
 
@@ -225,7 +232,7 @@ function FileValidation({ fileData, onValidationComplete, onBack }) {
           
           if (extension === 'tif' || extension === 'tiff') {
             detectedFormat = 'COG';
-          } else if (extension === 'nc') {
+          } else if (extension === 'nc' || extension === 'nc4') {
             detectedFormat = 'NetCDF';
           } else {
             detectedFormat = extension.toUpperCase();
@@ -233,9 +240,17 @@ function FileValidation({ fileData, onValidationComplete, onBack }) {
         }
       }
       
+      // Check if dataset has time dimension
+      // Look for time dimension in the dimensions object
+      let hasTimeDimension = false;
+      if (data.dimensions && data.dimensions.time !== undefined) {
+        hasTimeDimension = true;
+      }
+      
       return {
         isValid: true,
         format: detectedFormat,
+        hasTimeDimension: hasTimeDimension,
         message: `Compatible CMR dataset with ${detectedFormat} format`,
         details: data
       };
@@ -251,6 +266,7 @@ function FileValidation({ fileData, onValidationComplete, onBack }) {
       'tif': 'COG',
       'tiff': 'COG',
       'nc': 'NetCDF',
+      'nc4': 'NetCDF',
       'parquet': 'GeoParquet',
       'grib': 'GRIB',
       'hdf5': 'HDF5',
