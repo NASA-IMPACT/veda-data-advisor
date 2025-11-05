@@ -1,7 +1,237 @@
 import React from 'react';
 import './VisualizationOptions.css';
+import * as d3 from 'd3';
+
+function TimeSeriesChart({ data }) {
+  const svgRef = React.useRef();
+
+  React.useEffect(() => {
+    if (!data || !data.properties || !data.properties.statistics) return;
+
+    const statistics = data.properties.statistics;
+    
+    // Extract datetime and mean values
+    const chartData = Object.entries(statistics).map(([datetime, stats]) => {
+      // Parse the datetime string properly
+      const date = new Date(datetime);
+      return {
+        datetime: date,
+        dateStr: datetime,
+        mean: stats.mean
+      };
+    }).sort((a, b) => a.datetime - b.datetime);
+
+    if (chartData.length === 0) return;
+    
+    console.log('Chart data:', chartData);
+
+    // Clear previous chart
+    d3.select(svgRef.current).selectAll('*').remove();
+
+    // Set up dimensions
+    const margin = { top: 20, right: 30, bottom: 70, left: 70 };
+    const width = 800 - margin.left - margin.right;
+    const height = 300 - margin.top - margin.bottom;
+
+    // Create SVG
+    const svg = d3.select(svgRef.current)
+      .attr('width', width + margin.left + margin.right)
+      .attr('height', height + margin.top + margin.bottom)
+      .append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+
+    // Create scales
+    const xScale = d3.scaleBand()
+      .domain(chartData.map((d, i) => i))
+      .range([0, width])
+      .padding(0.1);
+
+    const minValue = d3.min(chartData, d => d.mean);
+    const maxValue = d3.max(chartData, d => d.mean);
+    const range = maxValue - minValue;
+    
+    // Better y-axis scaling for small values
+    const padding = range > 0 ? range * 0.1 : maxValue * 0.1;
+    const yScale = d3.scaleLinear()
+      .domain([
+        Math.max(0, minValue - padding),
+        maxValue + padding
+      ])
+      .range([height, 0])
+      .nice();
+
+    // Create line generator
+    const line = d3.line()
+      .x((d, i) => xScale(i) + xScale.bandwidth() / 2)
+      .y(d => yScale(d.mean));
+
+    // Add X axis with date formatting
+    svg.append('g')
+      .attr('transform', `translate(0,${height})`)
+      .call(d3.axisBottom(xScale)
+        .tickFormat(i => {
+          const date = chartData[i].datetime;
+          return d3.timeFormat('%Y-%m-%d')(date);
+        }))
+      .selectAll('text')
+      .style('text-anchor', 'end')
+      .style('font-size', '11px')
+      .attr('dx', '-.8em')
+      .attr('dy', '.15em')
+      .attr('transform', 'rotate(-45)');
+
+    // Add Y axis with better formatting for small numbers
+    svg.append('g')
+      .call(d3.axisLeft(yScale)
+        .ticks(8)
+        .tickFormat(d => d.toFixed(3)))
+      .selectAll('text')
+      .style('font-size', '11px');
+
+    // Add Y axis label
+    svg.append('text')
+      .attr('transform', 'rotate(-90)')
+      .attr('y', 0 - margin.left)
+      .attr('x', 0 - (height / 2))
+      .attr('dy', '1em')
+      .style('text-anchor', 'middle')
+      .style('fill', '#2d3748')
+      .style('font-size', '12px')
+      .text('Mean Value');
+
+    // Add the line
+    svg.append('path')
+      .datum(chartData)
+      .attr('fill', 'none')
+      .attr('stroke', '#3182ce')
+      .attr('stroke-width', 2)
+      .attr('d', line);
+
+    // Add dots
+    svg.selectAll('dot')
+      .data(chartData)
+      .enter()
+      .append('circle')
+      .attr('cx', (d, i) => xScale(i) + xScale.bandwidth() / 2)
+      .attr('cy', d => yScale(d.mean))
+      .attr('r', 4)
+      .attr('fill', '#3182ce');
+
+  }, [data]);
+
+  return (
+    <div className="chart-container">
+      <svg ref={svgRef}></svg>
+    </div>
+  );
+}
+
+function StatisticsPreview({ params }) {
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState(null);
+
+  React.useEffect(() => {
+    const fetchStatistics = async () => {
+      try {
+        setLoading(true);
+        
+        // Build URL with query parameters
+        const queryParams = new URLSearchParams({
+          concept_id: params.concept_id,
+          datetime: params.datetime,
+          temporal_mode: 'interval',
+          variable: params.variable,
+          backend: 'xarray'
+        });
+        
+        const url = `https://staging.openveda.cloud/api/titiler-cmr/timeseries/statistics?${queryParams.toString()}`;
+        
+        // Create GeoJSON polygon from bbox
+        const geoJson = {
+          type: "Feature",
+          bbox: params.bbox,
+          properties: {},
+          geometry: {
+            type: "Polygon",
+            coordinates: [
+              [
+                [params.bbox[0], params.bbox[1]], // minx, miny
+                [params.bbox[0], params.bbox[3]], // minx, maxy
+                [params.bbox[2], params.bbox[3]], // maxx, maxy
+                [params.bbox[2], params.bbox[1]], // maxx, miny
+                [params.bbox[0], params.bbox[1]]  // close the ring
+              ]
+            ]
+          }
+        };
+        
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(geoJson)
+        });
+
+        if (!response.ok) {
+          throw new Error(`API returned ${response.status}: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        setData(result);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (params) {
+      fetchStatistics();
+    }
+  }, [params]);
+
+  if (loading) {
+    return (
+      <div className="preview-container">
+        <div className="preview-loading">Loading statistics...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="preview-container">
+        <div className="preview-error" style={{ display: 'block' }}>
+          Error loading statistics: {error}
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  return (
+    <>
+      <div className="preview-container stats-preview">
+        <pre className="stats-json">
+          {JSON.stringify(data, null, 2)}
+        </pre>
+      </div>
+      <div className="chart-section">
+        <p className="chart-label">Mean Values Over Time:</p>
+        <TimeSeriesChart data={data} />
+      </div>
+    </>
+  );
+}
 
 function ServiceCard({ service }) {
+  const [showPostBody, setShowPostBody] = React.useState(false);
+  
   return (
     <div className="service-card">
       <div className="service-header">
@@ -46,6 +276,73 @@ function ServiceCard({ service }) {
               <div className="api-example-box">
                 <code className="api-example">{endpoint.exampleUrl}</code>
               </div>
+              
+              {endpoint.showPreview && (
+                <div className="preview-section">
+                  <p className="preview-label">Preview:</p>
+                  {endpoint.isPostRequest && endpoint.postParams ? (
+                    <>
+                      <div className="post-params-box">
+                        <p className="post-params-label">Query Parameters:</p>
+                        <pre className="post-params-json">
+                          {`concept_id=${endpoint.postParams.concept_id}
+datetime=${endpoint.postParams.datetime}
+temporal_mode=interval
+variable=${endpoint.postParams.variable}
+backend=xarray`}
+                        </pre>
+                      </div>
+                      <div className="post-params-box collapsible">
+                        <button 
+                          className="collapse-button"
+                          onClick={() => setShowPostBody(!showPostBody)}
+                        >
+                          <span className="toggle-icon">{showPostBody ? '▼' : '▶'}</span>
+                          <span className="post-params-label">POST Body (GeoJSON)</span>
+                        </button>
+                        {showPostBody && (
+                          <pre className="post-params-json">
+                            {JSON.stringify({
+                              type: "Feature",
+                              bbox: endpoint.postParams.bbox,
+                              properties: {},
+                              geometry: {
+                                type: "Polygon",
+                                coordinates: [[
+                                  [endpoint.postParams.bbox[0], endpoint.postParams.bbox[1]],
+                                  [endpoint.postParams.bbox[0], endpoint.postParams.bbox[3]],
+                                  [endpoint.postParams.bbox[2], endpoint.postParams.bbox[3]],
+                                  [endpoint.postParams.bbox[2], endpoint.postParams.bbox[1]],
+                                  [endpoint.postParams.bbox[0], endpoint.postParams.bbox[1]]
+                                ]]
+                              }
+                            }, null, 2)}
+                          </pre>
+                        )}
+                      </div>
+                      <div className="stats-response-section">
+                        <p className="stats-response-label">API Response:</p>
+                        <StatisticsPreview params={endpoint.postParams} />
+                      </div>
+                    </>
+                  ) : endpoint.previewUrl ? (
+                    <div className="preview-container">
+                      <img 
+                        src={endpoint.previewUrl} 
+                        alt="Time series visualization preview"
+                        className="preview-image"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.nextSibling.style.display = 'block';
+                        }}
+                      />
+                      <div className="preview-error" style={{ display: 'none' }}>
+                        Preview unavailable. The GIF will be generated when you access the URL above.
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -84,22 +381,89 @@ function VisualizationOptions({ fileData, validationResult, onReset }) {
 
       // Time series endpoints (only if has time dimension)
       if (metadata.hasTimeDimension) {
+        // Build test URL with actual metadata
+        let timeSeriesTestUrl = `https://staging.openveda.cloud/api/titiler-cmr/timeseries/bbox/{minx},{miny},{maxx},{maxy}.gif?concept_id=${validationResult.conceptId}`;
+        let datetimeRange = null;
+        let variable = null;
+        let bboxArray = null;
+        
+        if (validationResult.validationDetails) {
+          const details = validationResult.validationDetails;
+          
+          // Extract bounding box from coordinates.lat and coordinates.lon
+          let bbox = null;
+          if (details.coordinates && details.coordinates.lat && details.coordinates.lon) {
+            const latMin = details.coordinates.lat.min;
+            const latMax = details.coordinates.lat.max;
+            const lonMin = details.coordinates.lon.min;
+            const lonMax = details.coordinates.lon.max;
+            
+            if (latMin !== undefined && latMax !== undefined && lonMin !== undefined && lonMax !== undefined) {
+              bbox = `${lonMin},${latMin},${lonMax},${latMax}`;
+              bboxArray = [lonMin, latMin, lonMax, latMax];
+            }
+          }
+          
+          // Extract datetime from datetime[0].RangeDateTimes[0].BeginningDateTime
+          if (details.datetime && Array.isArray(details.datetime) && details.datetime.length > 0) {
+            const dateTimeEntry = details.datetime[0];
+            if (dateTimeEntry.RangeDateTimes && Array.isArray(dateTimeEntry.RangeDateTimes) && dateTimeEntry.RangeDateTimes.length > 0) {
+              const beginningDateTime = dateTimeEntry.RangeDateTimes[0].BeginningDateTime;
+              if (beginningDateTime) {
+                const startDate = new Date(beginningDateTime);
+                const endDate = new Date(startDate);
+                endDate.setDate(endDate.getDate() + 10);
+                datetimeRange = `${startDate.toISOString().split('.')[0]}Z/${endDate.toISOString().split('.')[0]}Z`;
+              }
+            }
+          }
+          
+          // Extract first variable from variables object
+          if (details.variables && typeof details.variables === 'object') {
+            const variableKeys = Object.keys(details.variables);
+            if (variableKeys.length > 0) {
+              variable = variableKeys[0];
+            }
+          }
+          
+          // Build complete test URL
+          if (bbox && datetimeRange && variable) {
+            timeSeriesTestUrl = `https://staging.openveda.cloud/api/titiler-cmr/timeseries/bbox/${bbox}.gif?concept_id=${validationResult.conceptId}&datetime=${datetimeRange}&variable=${variable}&backend=xarray&colormap_name=viridis&rescale=0,1`;
+          }
+        }
+        
         endpoints.push({
           name: 'time-series-visualization',
           title: 'Time Series Visualization',
           description: 'Visualize time series data for a bounding box',
           base: 'https://staging.openveda.cloud/api/titiler-cmr/',
-          pattern: 'timeseries/bbox/{minx},{miny},{maxx},{maxy}.{format}?concept_id={concept_id}',
-          exampleUrl: `https://staging.openveda.cloud/api/titiler-cmr/timeseries/bbox/{minx},{miny},{maxx},{maxy}.png?concept_id=${validationResult.conceptId}`
+          pattern: 'timeseries/bbox/{minx},{miny},{maxx},{maxy}.gif?concept_id={concept_id}&datetime={start}/{end}&variable={variable}&backend=xarray&colormap_name=viridis&rescale=0,1',
+          exampleUrl: timeSeriesTestUrl,
+          showPreview: true,
+          previewUrl: timeSeriesTestUrl.includes('.gif?') ? timeSeriesTestUrl : null
         });
+
+        // Build time series statistics URL with actual metadata
+        let statsParams = null;
+        if (datetimeRange && variable && bboxArray) {
+          statsParams = {
+            concept_id: validationResult.conceptId,
+            datetime: datetimeRange,
+            variable: variable,
+            bbox: bboxArray
+          };
+        }
 
         endpoints.push({
           name: 'time-series-statistics',
           title: 'Time Series Statistics',
           description: 'Generate statistics over time for multiple dates',
           base: 'https://staging.openveda.cloud/api/titiler-cmr/',
-          pattern: 'timeseries/statistics?concept_id={concept_id}&datetime={datetime}',
-          exampleUrl: `https://staging.openveda.cloud/api/titiler-cmr/timeseries/statistics?concept_id=${validationResult.conceptId}&datetime=2020-01-01/2020-12-31`
+          pattern: 'timeseries/statistics (POST)',
+          exampleUrl: `POST to: https://staging.openveda.cloud/api/titiler-cmr/timeseries/statistics`,
+          showPreview: true,
+          isPostRequest: true,
+          postParams: statsParams
         });
       }
 
