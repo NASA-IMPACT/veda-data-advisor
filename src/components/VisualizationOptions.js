@@ -1,71 +1,150 @@
 import React from 'react';
 import './VisualizationOptions.css';
 
+function ServiceCard({ service }) {
+  return (
+    <div className="service-card">
+      <div className="service-header">
+        <h4 className="service-title">{service.title}</h4>
+        {service.docsUrl && (
+          <a 
+            href={service.docsUrl}
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="api-docs-link"
+          >
+            📖 View API Docs
+          </a>
+        )}
+      </div>
+      <p className="service-description">{service.description}</p>
+      
+      <div className="service-details">
+        <div className="use-case">
+          <strong>Use Case:</strong> {service.useCase}
+        </div>
+      </div>
+
+      {service.endpoints && service.endpoints.length > 0 && (
+        <div className="endpoints-section">
+          {service.endpoints.map((endpoint, index) => (
+            <div key={index} className="endpoint-item">
+              <h5 className="endpoint-title">{endpoint.title}</h5>
+              <p className="endpoint-description">{endpoint.description}</p>
+              
+              <div className="api-url-box">
+                <code className="api-pattern">
+                  {endpoint.base}
+                  <br />
+                  {endpoint.pattern}
+                </code>
+              </div>
+              
+              <p className="api-example-label">Example:</p>
+              <div className="api-example-box">
+                <code className="api-example">{endpoint.exampleUrl}</code>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function VisualizationOptions({ fileData, validationResult, onReset }) {
-  const [selectedService, setSelectedService] = React.useState(null);
-
-  const handleServiceSelect = (serviceName) => {
-    setSelectedService(selectedService === serviceName ? null : serviceName);
-  };
-
   const getRecommendedServices = () => {
     const { format, metadata, isCMR } = validationResult;
     const services = [];
 
-    // For CMR datasets, ONLY recommend titiler-cmr
+    // For CMR datasets
     if (isCMR) {
+      const endpoints = [
+        {
+          name: 'visualization',
+          title: 'Visualization',
+          description: 'Tile-based visualization',
+          base: 'https://staging.openveda.cloud/api/titiler-cmr/',
+          pattern: 'tiles/WebMercatorQuad/{z}/{x}/{y}.png?concept_id={concept_id}',
+          exampleUrl: `https://staging.openveda.cloud/api/titiler-cmr/tiles/WebMercatorQuad/{z}/{x}/{y}.png?concept_id=${validationResult.conceptId}`
+        }
+      ];
+
+      // Time series endpoints (only if has time dimension)
+      if (metadata.hasTimeDimension) {
+        endpoints.push({
+          name: 'time-series-visualization',
+          title: 'Time Series Visualization',
+          description: 'Visualize time series data for a bounding box',
+          base: 'https://staging.openveda.cloud/api/titiler-cmr/',
+          pattern: 'timeseries/bbox/{minx},{miny},{maxx},{maxy}.{format}?concept_id={concept_id}',
+          exampleUrl: `https://staging.openveda.cloud/api/titiler-cmr/timeseries/bbox/{minx},{miny},{maxx},{maxy}.png?concept_id=${validationResult.conceptId}`
+        });
+
+        endpoints.push({
+          name: 'time-series-statistics',
+          title: 'Time Series Statistics',
+          description: 'Generate statistics over time',
+          base: 'https://staging.openveda.cloud/api/titiler-cmr/',
+          pattern: 'timeseries/statistics?concept_id={concept_id}&datetime={datetime}',
+          exampleUrl: `https://staging.openveda.cloud/api/titiler-cmr/timeseries/statistics?concept_id=${validationResult.conceptId}&datetime=2020-01-01/2020-12-31`
+        });
+      }
+
       services.push({
         name: 'titiler-cmr',
         title: 'Titiler-CMR',
-        description: 'For data on Earthdata Cloud with CMR metadata',
-        recommended: true,
-        limitations: [
-          'Only role-based support for GRIB datasets', 
-          'Datasets with hierarchical/grouped structure may not be supported', 
-          'Unknown "quirky" datasets may not be supported'
-        ],
+        description: 'Earthdata Cloud datasets via CMR',
         useCase: 'Best for data on Earthdata Cloud with CMR integration',
-        note: `This dataset is from Earthdata Cloud (Concept ID: ${validationResult.conceptId}). Titiler-CMR is the only compatible service for CMR datasets.`,
-        apiEndpoint: {
-          base: 'https://staging.openveda.cloud/api/titiler-cmr/',
-          pattern: 'tiles/WebMercatorQuad/{z}/{x}/{y}.png?concept_id={concept_id}',
-          conceptId: validationResult.conceptId,
-          docsUrl: 'https://staging.openveda.cloud/api/titiler-cmr/api.html',
-          isCMR: true
-        }
+        docsUrl: 'https://staging.openveda.cloud/api/titiler-cmr/api.html',
+        endpoints: endpoints
       });
+
       return services;
     }
 
-    // Based on the decision tree from the image for non-CMR datasets
+    // For non-CMR datasets
     if (metadata.spatialType === 'vector') {
       // Points, lines, polygons -> tipg
       services.push({
         name: 'tipg',
         title: 'TiPg (OGC Features API)',
-        description: 'Best for serving vector data (points, lines, polygons) via OGC Features API',
-        recommended: true,
-        limitations: ['High resolution data may be slow at low zoom levels', 'Time series generation may be slow for large AOIs'],
-        useCase: 'Ideal for GeoParquet and other vector formats'
+        description: 'Serve vector data via OGC Features API',
+        useCase: 'Interactive visualization for GeoParquet and other vector formats',
+        endpoints: []
       });
     }
 
     if (format === 'COG' || (metadata.spatialType === 'raster' && !metadata.hasTimeDimension)) {
-      // COG datasets
-      services.push({
-        name: 'titiler-pgstac',
-        title: 'Titiler-pgstac',
-        description: 'Optimized for Cloud Optimized GeoTIFF (COG) datasets',
-        recommended: format === 'COG',
-        limitations: [],
-        useCase: 'Best for static raster datasets. Requires VEDA COG + titiler-pgstac integration',
-        note: 'Migration and metadata generation may be a pre-requisite',
-        apiEndpoint: format === 'COG' && !isCMR ? {
-          base: 'https://openveda.cloud/api/raster/',
-          pattern: 'cog/tiles/WebMercatorQuad/{z}/{x}/{y}.png?url={url}',
-          exampleUrl: fileData.s3Url
-        } : null
-      });
+      if (format === 'COG' && !isCMR) {
+        const endpoints = [
+          {
+            name: 'visualization',
+            title: 'Visualization',
+            description: 'Tile-based visualization',
+            base: 'https://openveda.cloud/api/raster/',
+            pattern: 'cog/tiles/WebMercatorQuad/{z}/{x}/{y}.png?url={url}',
+            exampleUrl: `https://openveda.cloud/api/raster/cog/tiles/WebMercatorQuad/{z}/{x}/{y}.png?url=${encodeURIComponent(fileData.s3Url)}`
+          },
+          {
+            name: 'statistics',
+            title: 'Statistics',
+            description: 'Generate statistical summaries',
+            base: 'https://openveda.cloud/api/raster/',
+            pattern: 'cog/statistics?url={url}',
+            exampleUrl: `https://openveda.cloud/api/raster/cog/statistics?url=${encodeURIComponent(fileData.s3Url)}`
+          }
+        ];
+
+        services.push({
+          name: 'titiler-pgstac',
+          title: 'Titiler-pgstac',
+          description: 'Cloud Optimized GeoTIFF visualization and analysis',
+          useCase: 'Best for static raster datasets',
+          docsUrl: 'https://openveda.cloud/api/raster/docs',
+          endpoints: endpoints
+        });
+      }
     }
 
     if (format === 'NetCDF' || format === 'GRIB' || format === 'HDF5') {
@@ -75,20 +154,16 @@ function VisualizationOptions({ fileData, validationResult, onReset }) {
           name: 'titiler-multidim',
           title: 'Titiler-multidim',
           description: 'For multidimensional gridded data formats',
-          recommended: true,
-          limitations: [],
-          useCase: 'Best for NetCDF, GRIB, HDF5 with time dimensions',
-          note: 'Need to build support for item-level asset tiling with titiler-multidim in the UI. Consider creating a virtual dataset, then use titiler-multidim with a collection level "zarr" asset.'
+          useCase: 'Visualization for NetCDF, GRIB, HDF5 with time dimensions',
+          endpoints: []
         });
       } else {
         services.push({
           name: 'conversion',
           title: 'Format Conversion',
           description: 'Consider converting to a supported format',
-          recommended: false,
-          limitations: ['Format not directly supported'],
           useCase: 'Convert to COG or another cloud-optimized format',
-          note: 'Example: TEMPO (L2) data could be converted'
+          endpoints: []
         });
       }
     }
@@ -147,67 +222,10 @@ function VisualizationOptions({ fileData, validationResult, onReset }) {
       <h3 className="services-heading">Recommended Services</h3>
       <div className="services-list">
         {services.map((service, index) => (
-          <div key={index} className={`service-card ${service.recommended ? 'recommended' : ''}`}>
-            {service.recommended && (
-              <div className="recommended-badge">Recommended</div>
-            )}
-            <h4 className="service-title">{service.title}</h4>
-            <p className="service-description">{service.description}</p>
-            
-            <div className="service-details">
-              <div className="use-case">
-                <strong>Use Case:</strong> {service.useCase}
-              </div>
-            </div>
-
-            <button 
-              className="service-select-button"
-              onClick={() => handleServiceSelect(service.name)}
-            >
-              Select {service.name}
-            </button>
-
-            {selectedService === service.name && service.apiEndpoint && (
-              <div className="api-endpoint expanded">
-                <div className="api-header">
-                  <strong>🌐 Visualization API:</strong>
-                  <a 
-                    href={service.apiEndpoint.docsUrl || 'https://openveda.cloud/api/raster/docs'}
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="api-docs-link"
-                  >
-                    📖 View API Docs
-                  </a>
-                </div>
-                <p className="api-description">
-                  {service.apiEndpoint.isCMR 
-                    ? 'You can visualize this CMR dataset using the Titiler-CMR API:'
-                    : 'You can visualize this COG using the OpenVEDA raster API:'
-                  }
-                </p>
-                <div className="api-url-box">
-                  <code className="api-pattern">
-                    {service.apiEndpoint.base}
-                    <br />
-                    {service.apiEndpoint.pattern}
-                  </code>
-                </div>
-                <p className="api-example-label">Example tile URL for your dataset:</p>
-                <div className="api-example-box">
-                  <code className="api-example">
-                    {service.apiEndpoint.isCMR
-                      ? `${service.apiEndpoint.base}tiles/WebMercatorQuad/{z}/{x}/{y}.png?concept_id=${service.apiEndpoint.conceptId}`
-                      : `${service.apiEndpoint.base}cog/tiles/WebMercatorQuad/{z}/{x}/{y}.png?url=${encodeURIComponent(service.apiEndpoint.exampleUrl)}`
-                    }
-                  </code>
-                </div>
-                <p className="api-hint">
-                  Replace &#123;z&#125;, &#123;x&#125;, &#123;y&#125; with tile coordinates for web mapping libraries (Leaflet, Mapbox, OpenLayers, etc.)
-                </p>
-              </div>
-            )}
-          </div>
+          <ServiceCard 
+            key={index} 
+            service={service}
+          />
         ))}
       </div>
 
