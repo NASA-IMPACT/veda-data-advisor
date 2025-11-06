@@ -46,16 +46,20 @@ function TimeSeriesChart({ data }) {
       .range([0, width])
       .padding(0.1);
 
-    const minValue = d3.min(chartData, d => d.mean);
-    const maxValue = d3.max(chartData, d => d.mean);
+    // Calculate overall min, max, and mean
+    const allMeans = chartData.map(d => d.mean);
+    const minValue = Math.min(...allMeans);
+    const maxValue = Math.max(...allMeans);
+    const overallMean = allMeans.reduce((sum, val) => sum + val, 0) / allMeans.length;
     const range = maxValue - minValue;
     
-    // Better y-axis scaling for small values
-    const padding = range > 0 ? range * 0.1 : maxValue * 0.1;
+    // Add margin (10% of range or 10% of max value if range is too small)
+    const margin_value = range > 0 ? range * 0.1 : maxValue * 0.1;
+    
     const yScale = d3.scaleLinear()
       .domain([
-        Math.max(0, minValue - padding),
-        maxValue + padding
+        Math.max(0, minValue - margin_value),
+        maxValue + margin_value
       ])
       .range([height, 0])
       .nice();
@@ -80,11 +84,9 @@ function TimeSeriesChart({ data }) {
       .attr('dy', '.15em')
       .attr('transform', 'rotate(-45)');
 
-    // Add Y axis with better formatting for small numbers
+    // Add Y axis with full precision
     svg.append('g')
-      .call(d3.axisLeft(yScale)
-        .ticks(8)
-        .tickFormat(d => d.toFixed(3)))
+      .call(d3.axisLeft(yScale).ticks(8))
       .selectAll('text')
       .style('font-size', '11px');
 
@@ -98,6 +100,64 @@ function TimeSeriesChart({ data }) {
       .style('fill', '#2d3748')
       .style('font-size', '12px')
       .text('Mean Value');
+
+    // Add reference lines for min, max, and mean
+    // Min line
+    svg.append('line')
+      .attr('x1', 0)
+      .attr('x2', width)
+      .attr('y1', yScale(minValue))
+      .attr('y2', yScale(minValue))
+      .attr('stroke', '#e53e3e')
+      .attr('stroke-width', 1)
+      .attr('stroke-dasharray', '4,4')
+      .attr('opacity', 0.6);
+
+    svg.append('text')
+      .attr('x', width - 5)
+      .attr('y', yScale(minValue) - 5)
+      .attr('text-anchor', 'end')
+      .style('font-size', '11px')
+      .style('fill', '#e53e3e')
+      .text(`Min: ${minValue}`);
+
+    // Max line
+    svg.append('line')
+      .attr('x1', 0)
+      .attr('x2', width)
+      .attr('y1', yScale(maxValue))
+      .attr('y2', yScale(maxValue))
+      .attr('stroke', '#38a169')
+      .attr('stroke-width', 1)
+      .attr('stroke-dasharray', '4,4')
+      .attr('opacity', 0.6);
+
+    svg.append('text')
+      .attr('x', width - 5)
+      .attr('y', yScale(maxValue) - 5)
+      .attr('text-anchor', 'end')
+      .style('font-size', '11px')
+      .style('fill', '#38a169')
+      .text(`Max: ${maxValue}`);
+
+    // Mean line
+    svg.append('line')
+      .attr('x1', 0)
+      .attr('x2', width)
+      .attr('y1', yScale(overallMean))
+      .attr('y2', yScale(overallMean))
+      .attr('stroke', '#718096')
+      .attr('stroke-width', 1)
+      .attr('stroke-dasharray', '4,4')
+      .attr('opacity', 0.6);
+
+    svg.append('text')
+      .attr('x', width - 5)
+      .attr('y', yScale(overallMean) - 5)
+      .attr('text-anchor', 'end')
+      .style('font-size', '11px')
+      .style('fill', '#718096')
+      .text(`Mean: ${overallMean}`);
 
     // Add the line
     svg.append('path')
@@ -282,49 +342,49 @@ function ServiceCard({ service }) {
                   <p className="preview-label">Preview:</p>
                   {endpoint.isPostRequest && endpoint.postParams ? (
                     <>
-                      <div className="post-params-box">
-                        <p className="post-params-label">Query Parameters:</p>
-                        <pre className="post-params-json">
-                          {`concept_id=${endpoint.postParams.concept_id}
+                        <div className="post-params-box">
+                          <p className="post-params-label">Query Parameters:</p>
+                          <pre className="post-params-json">
+                            {`concept_id=${endpoint.postParams.concept_id}
 datetime=${endpoint.postParams.datetime}
 temporal_mode=interval
 variable=${endpoint.postParams.variable}
 backend=xarray`}
-                        </pre>
-                      </div>
-                      <div className="post-params-box collapsible">
-                        <button 
-                          className="collapse-button"
-                          onClick={() => setShowPostBody(!showPostBody)}
-                        >
-                          <span className="toggle-icon">{showPostBody ? '▼' : '▶'}</span>
-                          <span className="post-params-label">POST Body (GeoJSON)</span>
-                        </button>
-                        {showPostBody && (
-                          <pre className="post-params-json">
-                            {JSON.stringify({
-                              type: "Feature",
-                              bbox: endpoint.postParams.bbox,
-                              properties: {},
-                              geometry: {
-                                type: "Polygon",
-                                coordinates: [[
-                                  [endpoint.postParams.bbox[0], endpoint.postParams.bbox[1]],
-                                  [endpoint.postParams.bbox[0], endpoint.postParams.bbox[3]],
-                                  [endpoint.postParams.bbox[2], endpoint.postParams.bbox[3]],
-                                  [endpoint.postParams.bbox[2], endpoint.postParams.bbox[1]],
-                                  [endpoint.postParams.bbox[0], endpoint.postParams.bbox[1]]
-                                ]]
-                              }
-                            }, null, 2)}
                           </pre>
-                        )}
-                      </div>
-                      <div className="stats-response-section">
-                        <p className="stats-response-label">API Response:</p>
-                        <StatisticsPreview params={endpoint.postParams} />
-                      </div>
-                    </>
+                        </div>
+                        <div className="post-params-box collapsible">
+                          <button 
+                            className="collapse-button"
+                            onClick={() => setShowPostBody(!showPostBody)}
+                          >
+                            <span className="toggle-icon">{showPostBody ? '▼' : '▶'}</span>
+                            <span className="post-params-label">POST Body (GeoJSON)</span>
+                          </button>
+                          {showPostBody && (
+                            <pre className="post-params-json">
+                              {JSON.stringify({
+                                type: "Feature",
+                                bbox: endpoint.postParams.bbox,
+                                properties: {},
+                                geometry: {
+                                  type: "Polygon",
+                                  coordinates: [[
+                                    [endpoint.postParams.bbox[0], endpoint.postParams.bbox[1]],
+                                    [endpoint.postParams.bbox[0], endpoint.postParams.bbox[3]],
+                                    [endpoint.postParams.bbox[2], endpoint.postParams.bbox[3]],
+                                    [endpoint.postParams.bbox[2], endpoint.postParams.bbox[1]],
+                                    [endpoint.postParams.bbox[0], endpoint.postParams.bbox[1]]
+                                  ]]
+                                }
+                              }, null, 2)}
+                            </pre>
+                          )}
+                        </div>
+                        <div className="stats-response-section">
+                          <p className="stats-response-label">API Response:</p>
+                          <StatisticsPreview params={endpoint.postParams} />
+                        </div>
+                      </>
                   ) : endpoint.previewUrl ? (
                     <div className="preview-container">
                       <img 
@@ -526,12 +586,40 @@ function VisualizationOptions({ fileData, validationResult, onReset }) {
     if (format === 'NetCDF' || format === 'GRIB' || format === 'HDF5') {
       // Gridded formats (not COG)
       if (metadata.hasTimeDimension) {
+        const endpoints = [
+          {
+            name: 'visualization',
+            title: 'Visualization',
+            description: 'Tile-based visualization for multidimensional data',
+            base: 'https://staging.openveda.cloud/api/titiler-multidim/',
+            pattern: 'tiles/WebMercatorQuad/{z}/{x}/{y}.png?url={url}',
+            exampleUrl: `https://staging.openveda.cloud/api/titiler-multidim/tiles/WebMercatorQuad/{z}/{x}/{y}.png?url=${encodeURIComponent(fileData.s3Url)}`
+          },
+          {
+            name: 'info',
+            title: 'Dataset Info',
+            description: 'Get dataset metadata and variables',
+            base: 'https://staging.openveda.cloud/api/titiler-multidim/',
+            pattern: 'info?url={url}',
+            exampleUrl: `https://staging.openveda.cloud/api/titiler-multidim/info?url=${encodeURIComponent(fileData.s3Url)}`
+          },
+          {
+            name: 'statistics',
+            title: 'Statistics',
+            description: 'Generate statistical summaries',
+            base: 'https://staging.openveda.cloud/api/titiler-multidim/',
+            pattern: 'statistics?url={url}',
+            exampleUrl: `https://staging.openveda.cloud/api/titiler-multidim/statistics?url=${encodeURIComponent(fileData.s3Url)}`
+          }
+        ];
+
         services.push({
           name: 'titiler-multidim',
           title: 'Titiler-multidim',
           description: 'For multidimensional gridded data formats',
           useCase: 'Visualization for NetCDF, GRIB, HDF5 with time dimensions',
-          endpoints: []
+          docsUrl: 'https://staging.openveda.cloud/api/titiler-multidim/',
+          endpoints: endpoints
         });
       } else {
         services.push({
@@ -605,6 +693,22 @@ function VisualizationOptions({ fileData, validationResult, onReset }) {
             <span className="toggle-icon">{showValidationDetails ? '▼' : '▶'}</span>
             <span>Validation Details</span>
           </button>
+          
+          {validationResult.validationDetails._variableUsed && (
+            <div className="variable-info-header">
+              <div className="variable-info-item">
+                <span className="variable-info-label">Variable Used:</span>
+                <span className="variable-info-value">{validationResult.validationDetails._variableUsed}</span>
+              </div>
+              {validationResult.validationDetails._allVariables && (
+                <div className="variable-info-item">
+                  <span className="variable-info-label">All Variables:</span>
+                  <span className="variable-info-value">{validationResult.validationDetails._allVariables.join(', ')}</span>
+                </div>
+              )}
+            </div>
+          )}
+          
           {showValidationDetails && (
             <div className="validation-details-content">
               <pre className="validation-json">

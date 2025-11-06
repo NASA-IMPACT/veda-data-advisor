@@ -15,6 +15,8 @@ function FileValidation({ fileData, onValidationComplete, onBack }) {
     const steps = [];
     let isValid = true;
     let validationDetails = null;
+    let detectedFormat = 'Unknown';
+    let hasTimeDimension = false;
 
     // Handle CMR URLs differently
     if (fileData.type === 'cmr') {
@@ -45,8 +47,8 @@ function FileValidation({ fileData, onValidationComplete, onBack }) {
           const compatibilityResult = await validateCMRCompatibility(conceptId);
           isValid = compatibilityResult.isValid;
           validationDetails = compatibilityResult.details;
-          const detectedFormat = compatibilityResult.format;
-          const hasTimeDimension = compatibilityResult.hasTimeDimension;
+          detectedFormat = compatibilityResult.format;
+          hasTimeDimension = compatibilityResult.hasTimeDimension;
           
           steps[steps.length - 1].status = 'completed';
           steps[steps.length - 1].message = compatibilityResult.message;
@@ -99,7 +101,7 @@ function FileValidation({ fileData, onValidationComplete, onBack }) {
       setValidationSteps([...steps]);
       
       await simulateDelay(500);
-      const detectedFormat = detectFileFormat(fileData.fileName);
+      detectedFormat = detectFileFormat(fileData.fileName);
       steps[steps.length - 1].status = 'completed';
       steps[steps.length - 1].message = `Detected format: ${detectedFormat}`;
       setValidationSteps([...steps]);
@@ -123,8 +125,31 @@ function FileValidation({ fileData, onValidationComplete, onBack }) {
           steps[steps.length - 1].message = `Validation error: ${error.message}`;
           isValid = false;
         }
+      } else if (detectedFormat === 'NetCDF' && fileData.type === 's3') {
+        // NetCDF validation using titiler-multidim
+        try {
+          const validationResult = await validateNetCDF(fileData.s3Url);
+          isValid = validationResult.isValid;
+          validationDetails = {
+            ...validationResult.details,
+            _variableUsed: validationResult.variableUsed,
+            _allVariables: validationResult.allVariables
+          };
+          
+          // Check if has time dimension
+          if (validationDetails.dimensions && validationDetails.dimensions.time !== undefined) {
+            hasTimeDimension = true;
+          }
+          
+          steps[steps.length - 1].status = isValid ? 'completed' : 'failed';
+          steps[steps.length - 1].message = validationResult.message;
+        } catch (error) {
+          steps[steps.length - 1].status = 'failed';
+          steps[steps.length - 1].message = `Validation error: ${error.message}`;
+          isValid = false;
+        }
       } else {
-        // For non-COG formats, use simulated validation
+        // For other formats, use simulated validation
         await simulateDelay(2000);
         steps[steps.length - 1].status = 'completed';
         steps[steps.length - 1].message = getFormatValidationMessage(detectedFormat);
@@ -140,7 +165,7 @@ function FileValidation({ fileData, onValidationComplete, onBack }) {
           isValid: isValid,
           isCloudOptimized: isValid && checkCloudOptimized(detectedFormat),
           isCMR: false,
-          metadata: getMetadata(detectedFormat),
+          metadata: getMetadata(detectedFormat, hasTimeDimension),
           validationDetails: validationDetails
         });
       }, 1000);
@@ -174,6 +199,48 @@ function FileValidation({ fileData, onValidationComplete, onBack }) {
     } catch (error) {
       console.error('COG Validation Error:', error);
       throw new Error(error.message || 'Failed to validate COG');
+    }
+  };
+
+  const validateNetCDF = async (fileUrl) => {
+    try {
+      // Step 1: Get variables list (acts as S3 access check)
+      const variablesUrl = `https://staging.openveda.cloud/api/titiler-multidim/variables?url=${encodeURIComponent(fileUrl)}`;
+      
+      const variablesResponse = await fetch(variablesUrl);
+      
+      if (!variablesResponse.ok) {
+        throw new Error(`Variables API returned ${variablesResponse.status}: ${variablesResponse.statusText}`);
+      }
+
+      const variables = await variablesResponse.json();
+      
+      if (!Array.isArray(variables) || variables.length === 0) {
+        throw new Error('No variables found in NetCDF file');
+      }
+
+      // Step 2: Get info for the first variable
+      const firstVariable = variables[0];
+      const infoUrl = `https://staging.openveda.cloud/api/titiler-multidim/info?url=${encodeURIComponent(fileUrl)}&variable=${encodeURIComponent(firstVariable)}`;
+      
+      const infoResponse = await fetch(infoUrl);
+      
+      if (!infoResponse.ok) {
+        throw new Error(`Info API returned ${infoResponse.status}: ${infoResponse.statusText}`);
+      }
+
+      const infoData = await infoResponse.json();
+      
+      return {
+        isValid: true,
+        message: `Valid NetCDF file with ${variables.length} variable(s). Using variable: ${firstVariable}`,
+        details: infoData,
+        variableUsed: firstVariable,
+        allVariables: variables
+      };
+    } catch (error) {
+      console.error('NetCDF Validation Error:', error);
+      throw new Error(error.message || 'Failed to validate NetCDF');
     }
   };
 

@@ -21,6 +21,10 @@ function FileInput({ onSubmit }) {
     {
       label: 'COG - Bangladesh Landcover',
       url: 's3://veda-data-store/bangladesh-landcover-2001-2020/MODIS_LC_2001_BD_v2.cog.tif'
+    },
+    {
+      label: 'NetCDF - NEX GDDP CMIP6',
+      url: 's3://veda-nex-gddp-cmip6-public/v0/netcdf/fwi/mme/mme50/yearly/ssp245/2100/mme50_ssp245_fwi_metrics_yearly_2100.nc'
     }
   ];
 
